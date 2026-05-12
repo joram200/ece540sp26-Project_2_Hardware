@@ -1,9 +1,4 @@
-typedef struct packed 
-{
-    logic[3:0] red;
-    logic[3:0] green;
-    logic[3:0] blue;
-} pixel_t;
+typedef logic [11:0] pixel_t;
                      // row,    col
 typedef pixel_t frame_t [0:239][0:319];
 
@@ -163,25 +158,34 @@ module frameBuffer
     input logic clk,
     input logic rst,
     output pixel_t outputPixel,
-    input pixel_t inputPixels[2],
+    input pixel_t inputPixel,
     input logic[31:0] pixelWriteAddr,
     input logic[23:0] pixelReadAddr
 );
     // at min 0.004608s to write a full buffer
     // at 75Hz, 0.01333333s per frame
+    localparam int FB_ROW  = 240;
+    localparam int FB_COL  = 320; // width
+    localparam int FB_PIXELS = FB_COL * FB_ROW;
+    (* ram_style = "block" *) pixel_t frameBuffer [0:FB_PIXELS-1];
 
-    frame_t frameBuffer;
+    logic [16:0] writeAddr;
+    logic [16:0] readAddr;
+    pixel_t readData;
+
+    assign writeAddr = pixelWriteAddr[23:12] * FB_COL + pixelWriteAddr[11:0];
+    assign readAddr = pixelReadAddr[23:13] * FB_COL + pixelReadAddr[11:1];
 
     always_ff@(posedge clk)
     begin: frame_write
         // row, column
-        frameBuffer[pixelWriteAddr[23:12]][pixelWriteAddr[11:0]] <= inputPixels[0];
-        frameBuffer[pixelWriteAddr[23:12]][pixelWriteAddr[11:0]+12'd1] <= inputPixels[1];
+        frameBuffer[writeAddr] <= inputPixel;
+        readData <=  frameBuffer[readAddr];
     end
 
     always_comb
-    begin: frame_select
-        outputPixel = frameBuffer[pixelReadAddr[23:13]][pixelReadAddr[11:1]];
+    begin: frame_read
+        outputPixel = readData;
     end
 endmodule
 
@@ -207,9 +211,9 @@ module scanoutEngine
         begin
             if(video_on)
             begin
-                vgaRed <= inputPixel.red;
-                vgaGreen <= inputPixel.green;
-                vgaBlue <= inputPixel.blue;
+                vgaRed <= inputPixel[11:8];
+                vgaGreen <= inputPixel[7:4];
+                vgaBlue <= inputPixel[3:0];
             end
             else
             begin
@@ -240,12 +244,12 @@ module vgaTop #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32)
     output logic vgaHsync,
     output logic vgaVsync
 );
-    logic videOn;
+    logic videoOn;
     logic[11:0] pixelRowAddr;
     logic[11:0] pixelColAddr;
     pixel_t displayPixel;
     logic[31:0] pixelAddr;
-    logic[23:0] pixelData;
+    logic[31:0] pixelData;
     logic regWriteEn;
     logic regReadEn;
     logic vgaEn;
@@ -284,7 +288,7 @@ module vgaTop #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32)
         .vgaEnReg(vgaEn),
         .vgaOutputReg({vgaBlue, vgaGreen, vgaRed}),
         .vgaPixelAddr(pixelAddr),
-        .vgaPixelData({8'b0, pixelData})
+        .vgaPixelData(pixelData)
     );
     
     vga_wb_slave_agent vgaAgent
@@ -304,7 +308,7 @@ module vgaTop #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32)
     (
         .clk(wb_clk_i),
         .rst(wb_rst_i),
-        .video_on(videOn),
+        .video_on(videoOn),
         .inputPixel(displayPixel),
         .vgaRed(vgaRed_m),
         .vgaGreen(vgaGreen_m),
@@ -316,16 +320,17 @@ module vgaTop #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32)
         .clk(wb_clk_i),
         .rst(wb_rst_i),
         .outputPixel(displayPixel),
-        .inputPixels('{pixelData[23:12], pixelData[11:0]}),
+        .inputPixel(pixelData[11:0]),
         .pixelReadAddr({pixelRowAddr, pixelColAddr}), // this comes from the dtg
         .pixelWriteAddr(pixelAddr)
     );
     dtg myDtg
     (
-        .clock(wb_clk_i), 
+        .clock(wb_clk_i),
+        .rst(wb_rst_i),
         .horiz_sync(vgaHsync), 
         .vert_sync(vgaVsync), 
-        .video_on(videOn), 
+        .video_on(videoOn), 
         .pixel_row(pixelRowAddr), 
         .pixel_column(pixelColAddr)
     );
