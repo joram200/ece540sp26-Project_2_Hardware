@@ -111,5 +111,5 @@ set_property -dict { PACKAGE_PIN C7   IOSTANDARD LVCMOS33 } [get_ports { vgaBlue
 set_property -dict { PACKAGE_PIN D7   IOSTANDARD LVCMOS33 } [get_ports { vgaBlue[2] }];
 set_property -dict { PACKAGE_PIN D8   IOSTANDARD LVCMOS33 } [get_ports { vgaBlue[3] }];
 
-set_property -dict { PACKAGE_PIN B11  IOSTANDARD LVCMOS33 } [get_ports { vgaHsync[0] }];
-set_property -dict { PACKAGE_PIN B12  IOSTANDARD LVCMOS33 } [get_ports { vgaVsync[1] }];
+set_property -dict { PACKAGE_PIN B11  IOSTANDARD LVCMOS33 } [get_ports { vgaHsync }];
+set_property -dict { PACKAGE_PIN B12  IOSTANDARD LVCMOS33 } [get_ports { vgaVsync }];
