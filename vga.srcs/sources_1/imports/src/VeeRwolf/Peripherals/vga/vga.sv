@@ -12,8 +12,9 @@ module vgaRegisterFile #(parameter numRegs = 16)
     input logic readEn,
     input logic writeEn,
 
-    // REG 0: VGA_ENABLE_REG
+    // REG 0: VGA_CTL_REG
     output logic vgaEnReg,
+    output logic pixelWriteEn,
 
     // REG 1: VGA_OUTPUT_ENABLE_REG, RO
     input logic[11:0] vgaOutputReg,
@@ -67,6 +68,7 @@ module vgaRegisterFile #(parameter numRegs = 16)
     always_comb
     begin: peripheral_output_logic
         vgaEnReg = registerFile[0][0];
+        pixelWriteEn = registerFile[0][1];
         vgaPixelAddr = registerFile[2];
         vgaPixelData = registerFile[3];
     end
@@ -157,6 +159,7 @@ module frameBuffer
 (
     input logic clk,
     input logic rst,
+    input logic writeEn,
     output pixel_t outputPixel,
     input pixel_t inputPixel,
     input logic[31:0] pixelWriteAddr,
@@ -169,17 +172,23 @@ module frameBuffer
     localparam int FB_PIXELS = FB_COL * FB_ROW;
     (* ram_style = "block" *) pixel_t frameBuffer [0:FB_PIXELS-1];
 
-    logic [16:0] writeAddr;
-    logic [16:0] readAddr;
+    logic[18:0] writeAddr;
+    logic[18:0] readAddr;
     pixel_t readData;
+
+    logic writeCounter;
+    logic readCounter;
 
     assign writeAddr = pixelWriteAddr[23:12] * FB_COL + pixelWriteAddr[11:0];
     assign readAddr = pixelReadAddr[23:13] * FB_COL + pixelReadAddr[11:1];
 
     always_ff@(posedge clk)
     begin: frame_write
-        // row, column
-        frameBuffer[writeAddr] <= inputPixel;
+        if(writeEn)
+        begin
+            // row, column
+            frameBuffer[writeAddr] <= inputPixel;
+        end
         readData <=  frameBuffer[readAddr];
     end
 
@@ -253,6 +262,7 @@ module vgaTop #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32)
     logic regWriteEn;
     logic regReadEn;
     logic vgaEn;
+    logic pixelWriteEn;
 
     logic[3:0] vgaRed_m;
     logic[3:0] vgaGreen_m;
@@ -286,6 +296,7 @@ module vgaTop #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32)
         .writeEn(regWriteEn),
 
         .vgaEnReg(vgaEn),
+        .pixelWriteEn(pixelWriteEn),
         .vgaOutputReg({vgaBlue, vgaGreen, vgaRed}),
         .vgaPixelAddr(pixelAddr),
         .vgaPixelData(pixelData)
@@ -300,8 +311,8 @@ module vgaTop #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32)
         .wb_stb_i(wb_stb_i),
         .wb_ack_o(wb_ack_o),
         .wb_err_o(wb_err_o),
-        .readEn(regWriteEn),
-        .writeEn(regReadEn)
+        .readEn(regReadEn),
+        .writeEn(regWriteEn)
     );
 
     scanoutEngine myEngine
@@ -319,6 +330,7 @@ module vgaTop #(parameter DATA_WIDTH = 32, ADDR_WIDTH = 32)
     (
         .clk(wb_clk_i),
         .rst(wb_rst_i),
+        .writeEn(pixelWriteEn),
         .outputPixel(displayPixel),
         .inputPixel(pixelData[11:0]),
         .pixelReadAddr({pixelRowAddr, pixelColAddr}), // this comes from the dtg
